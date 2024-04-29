@@ -1,5 +1,4 @@
 import sys,os
-from add_bookmark import MyWindow
 from PySide6.QtWidgets import (
     QApplication,
     QMainWindow,
@@ -275,23 +274,16 @@ class ButtonHolder(QWidget):
         if selected_text:
             # Get the current page number based on the cursor position
             cursor = self.main_window.pdf_view.text_edit.textCursor() # Creating a cursor to navigate the document
-            start_index = cursor.selectionStart()
-            end_index = cursor.selectionEnd()
-            color = "red"
-             # Creating a cursor to navigate the document
             format = QTextCharFormat() # Creating a format to apply on the text
             format.setBackground(QColor("red")) 
             cursor.mergeCharFormat(format) # Applying the formating on the selected text
             file_path = "highlights.txt"
-            L = [] # Appending the details in a list
-            L.append([start_index,end_index,color]) 
-            # L.extend(selected_text.split("\u2029"))
+            L = [] # Appending the details in a list 
+            L.append([selected_text])
             file_path = "highlights.txt"  # Save highlights to a text file
-            with open(file_path, "a+",encoding="utf-8") as file:
+            with open(file_path, "w",encoding="utf-8") as file:
                 for i in L:
-                    for j in i:
-                        file.write(str(j) +" ")
-                    file.write("\n")
+                    file.write(",".join(map(str, i)) + "\n")
         else:
             QMessageBox.information(self,"No Text selected ","Select a portion of the document") # Prompting the user to select some text
 
@@ -301,44 +293,29 @@ class ButtonHolder(QWidget):
         if selected_text:
             # Get the current page number based on the cursor position
             cursor = self.main_window.pdf_view.text_edit.textCursor() # Creating a cursor to navigate the document
-            start_index = cursor.selectionStart()
-            end_index = cursor.selectionEnd()
-            color = "Transparent" # Creating a cursor to navigate the document
             format = QTextCharFormat() # Creating the default format to apply on the text
-            format.setBackground(QColor(color))   
-            cursor.mergeCharFormat(format)
-            file_path = "highlights.txt"
-            L = [] # Appending the details in a list
-            L.append([start_index,end_index,color])
-            file_path = "highlights.txt"  # Save highlights to a text file
-            with open(file_path, "a+",encoding="utf-8") as file:
-                for i in L:
-                    for j in i:
-                        file.write(str(j) +" ")
-                    file.write("\n")
+            format.setBackground(QColor("Transparent"))   
+            cursor.mergeCharFormat(format) # Applying the formating on the selected text
         else:
             QMessageBox.information(self,"No Text selected ","Select a portion of the document") # Prompting the user to select some text
 
     def load_highlighted_text(self):
         try:
-           cursor = self.main_window.pdf_view.text_edit.textCursor()
             # Reading the file in which highlights are stored and appending to a list
             loaded_highlights = []
             file_path = "highlights.txt"
-            with open(file_path, "r", encoding="utf-8") as file:
-                for i in file.readlines():
-                    loaded_highlights.append(i)
+            with open(file_path, "r",encoding="utf-8") as file:
+                for line in file:
+                    loaded_highlights.append(list(map(str.strip, line.split(","))))
             # Reading the list and applying the formating 
             for i in loaded_highlights:
-                L = i.split(" ")
-                start_index = int(L[0])
-                end_index = int(L[1])
-                color = L[2]
+                selected_text = i[0]
+                cursor = self.main_window.pdf_view.text_edit.textCursor() # Creating a cursor to navigate the document
+                color = "red"
                 format = QTextCharFormat() # Creating the default format to apply on the text
-                format.setBackground(QColor(color)) # Moving the cursor the location of selected text
-                cursor.setPosition(start_index)
-                cursor.movePosition(QTextCursor.Right, QTextCursor.KeepAnchor, end_index - start_index)
-                cursor.setCharFormat(format)
+                format.setBackground(QColor(color))
+                cursor = self.main_window.pdf_view.text_edit.document().find(selected_text, cursor) # Moving the cursor the location of selected text
+                cursor.mergeCharFormat(format)
         except FileNotFoundError:
             pass  # No highlighted text information available
 
@@ -406,13 +383,13 @@ class ButtonHolder(QWidget):
             # Extract PDF name from path
             pdf_name = os.path.splitext(os.path.basename(self.main_window.pdf_view.pdf_path))[0]
             # Create bookmark window with required inputs
-            bookmark_window = MyWindow(current_page, pdf_name, current_dir, selected_text)
+            bookmark_window = Add_bookmark(current_page, pdf_name, current_dir, selected_text)
             # Set window geometry
-            bookmark_window.setGeometry(100, 100, 900, 400)
+            #bookmark_window.setGeometry(100, 100, 900, 400)
             # Show the window
-            bookmark_window.show()
+            #bookmark_window.show()
             # Execute the window event loop
-            bookmark_window.exec_()
+            a = bookmark_window.exec()
         else:
             # Show message if no text is selected
             QMessageBox.information(self, "No Text selected", "Please select a text to add bookmark")
@@ -483,6 +460,177 @@ class Data_Bookmark:
         self.notes = notes
         self.word = word
 
+#Class for adding bookmarks
+class Add_bookmark(QDialog):
+    def __init__(self, page_number, pdf_name, current_dir, word):
+        super().__init__()
+        self.page_number = page_number
+        self.pdf_name = pdf_name
+        self.current_dir = current_dir
+        self.word = word
+        self.init_ui()
+
+    def init_ui(self):
+        self.setWindowTitle("Bookmark Manager")
+
+        # Create QTableWidget for displaying bookmarks
+        self.table_widget = QtWidgets.QTableWidget(self)
+        self.table_widget.setColumnCount(4)
+        self.table_widget.setHorizontalHeaderLabels(["Bookmark Name", "Page Number", "Notes", "Hint"])
+
+        # Set size policy for the table widget
+        self.table_widget.setSizeAdjustPolicy(QtWidgets.QAbstractScrollArea.AdjustToContents)
+        # Set selection mode to select entire rows
+        self.table_widget.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
+
+        # Set column widths
+        self.table_widget.setColumnWidth(0, 150)  # Bookmark Name
+        self.table_widget.setColumnWidth(1, 80)  # Page Number
+        self.table_widget.setColumnWidth(2, 250)  # Notes
+        self.table_widget.setColumnWidth(3, 250)  # Hint
+
+        # Set row height for better visibility of multi-line notes
+        self.table_widget.verticalHeader().setDefaultSectionSize(50)
+
+        # Create QPushButton for adding, editing, and removing bookmarks
+        self.add_button = QtWidgets.QPushButton("Add Bookmark", self)
+        self.add_button.clicked.connect(self.add_bookmark)
+
+        self.edit_button = QtWidgets.QPushButton("Edit Bookmark", self)
+        self.edit_button.clicked.connect(self.edit_bookmark)
+
+        self.remove_button = QtWidgets.QPushButton("Remove Bookmark", self)
+        self.remove_button.clicked.connect(self.remove_bookmark)
+
+        self.close_button = QtWidgets.QPushButton("Close", self)
+        self.close_button.clicked.connect(self.close)
+
+        # Create layout
+        layout = QtWidgets.QVBoxLayout(self)
+        layout.addWidget(self.table_widget)
+        layout.addWidget(self.add_button)
+        layout.addWidget(self.edit_button)
+        layout.addWidget(self.remove_button)
+        layout.addWidget(self.close_button)
+
+        # Load bookmarks from file
+        self.load_bookmarks()
+
+        self.setFixedSize(900,400)
+
+    def add_bookmark(self):
+        # Get bookmark name from user input
+        bookmark_name, ok = QtWidgets.QInputDialog.getText(self, "Input Dialog", "Enter Bookmark name:")
+        if not ok:
+            return
+        
+        # Get notes from user input
+        notes, ok = QtWidgets.QInputDialog.getText(self, "Input Dialog", "Enter notes:")
+        if not ok:
+            return
+
+        # Create bookmark object
+        bookmark = Data_Bookmark(bookmark_name, self.page_number, notes, self.word)
+
+        # Add bookmark to the table
+        self.add_bookmark_to_table(bookmark)
+
+        # Save bookmarks to file
+        self.save_bookmarks()
+
+    def edit_bookmark(self):
+        # Get selected item
+        selected_item = self.table_widget.selectedItems()
+        if not selected_item:
+            return
+
+        row = selected_item[0].row()
+
+        # Retrieve bookmark details from the selected row
+        bookmark_name = self.table_widget.item(row, 0).text()
+        notes = self.table_widget.item(row, 2).text()
+
+        # Prompt user to edit bookmark details
+        new_bookmark_name, ok = QtWidgets.QInputDialog.getText(self, "Edit Bookmark", "Enter new bookmark name:", text=bookmark_name)
+        if not ok:
+            return
+
+        new_notes, ok = QtWidgets.QInputDialog.getText(self, "Edit Bookmark", "Enter new notes:", text=notes)
+        if not ok:
+            return
+
+        # Update bookmark details in the table
+        self.table_widget.item(row, 0).setText(new_bookmark_name)
+        self.table_widget.item(row, 2).setText(new_notes)
+
+        # Save bookmarks to file
+        self.save_bookmarks()
+
+    def remove_bookmark(self):
+        # Get selected item
+        selected_item = self.table_widget.selectedItems()
+        if not selected_item:
+            return
+
+        row = selected_item[0].row()
+
+        # Remove selected row from the table
+        self.table_widget.removeRow(row)
+
+        # Save bookmarks to file
+        self.save_bookmarks()
+
+    def add_bookmark_to_table(self, bookmark):
+        row_position = self.table_widget.rowCount()
+        self.table_widget.insertRow(row_position)
+
+        # Insert bookmark's details into the table
+        self.table_widget.setItem(row_position, 0, QtWidgets.QTableWidgetItem(bookmark.bookmark_name))
+        self.table_widget.setItem(row_position, 1, QtWidgets.QTableWidgetItem(str(bookmark.page_number)))
+        self.table_widget.setItem(row_position, 2, QtWidgets.QTableWidgetItem(bookmark.notes))
+        self.table_widget.setItem(row_position, 3, QtWidgets.QTableWidgetItem(bookmark.word))
+
+    def save_bookmarks(self):
+        # Define the file name based on the PDF name
+        filename = f"{self.pdf_name}_bookmarks.txt"
+        # Get the current directory
+        filepath = os.path.join(self.current_dir, filename)
+        # Open the file in write mode
+        with open(filepath, "w", encoding="utf-8") as file:
+            # Write all bookmarks to the file
+            for row in range(self.table_widget.rowCount()):
+                bookmark_name = self.table_widget.item(row, 0).text()
+                page_number = int(self.table_widget.item(row, 1).text())
+                notes = self.table_widget.item(row, 2).text().replace('\n', '<br>')  # Replace newline with a placeholder
+                word = self.table_widget.item(row, 3).text().replace('\n', '<br>')  # Replace newline with a placeholder
+                file.write(f"{bookmark_name};*;#%{page_number};*;#%{notes};*;#%{word}\n")
+
+    def load_bookmarks(self):
+        # Define the file name based on the PDF name
+        filename = f"{self.pdf_name}_bookmarks.txt"
+        # Get the current directory
+        filepath = os.path.join(self.current_dir, filename)
+        # Open the file in read mode
+        try:
+            with open(filepath, "r+", encoding="utf-8") as file:
+                # Read each line from the file
+                for line in file:
+                    # Split the line into bookmark details
+                    bookmark_name, page_number, notes, word = line.strip().split(';*;#%')
+                    page_number = int(page_number)
+                    # Replace placeholder with newline character
+                    notes = notes.replace('<br>', '\n')
+                    word = word.replace('<br>', '\n')
+                    # Create bookmark object
+                    bookmark = Data_Bookmark(bookmark_name, page_number, notes, word)
+                    # Add bookmark to the table
+                    self.add_bookmark_to_table(bookmark)
+
+        except FileNotFoundError:
+            # If the file doesn't exist, create it
+            with open(filepath, "w", encoding="utf-8"):
+                pass  # Do nothing, file created
+
 # Class for displaying and managing bookmarks dialog
 class open_bookmark(QDialog):
     def __init__(self, pdf_name, current_dir):
@@ -551,7 +699,7 @@ class open_bookmark(QDialog):
                 # Read each line from the file
                 for line in file:
                     # Split the line into bookmark details
-                    bookmark_name, page_number, notes, word = line.strip().split(';')
+                    bookmark_name, page_number, notes, word = line.strip().split(';*;#%')
                     page_number = int(page_number)
                     # Replace placeholder with newline character
                     notes = notes.replace('<br>', '\n')
